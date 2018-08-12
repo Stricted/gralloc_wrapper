@@ -28,10 +28,10 @@
 
 #ifdef __LP64__
 #define OEM_GRALLOC "/system/lib64/hw/gralloc.vendor.exynos5.so"
-#define OSS_GRALLOC "/system/lib64/hw/gralloc.deblob.exynos5.so"
+#define OSS_GRALLOC "/system/lib64/hw/gralloc.exynos5.so"
 #else
 #define OEM_GRALLOC "/system/lib/hw/gralloc.vendor.exynos5.so"
-#define OSS_GRALLOC "/system/lib/hw/gralloc.deblob.exynos5.so"
+#define OSS_GRALLOC "/system/lib/hw/gralloc.exynos5.so"
 #endif
 
 #define OSS_GRALLOC_PROPERTY "gralloc.use_oss"
@@ -93,12 +93,17 @@ static void _dump_handle(buffer_handle_t handle, const char *func) {
 		ALOGW("invalid gralloc magic");
 		return;
 	}
-	ALOGI("%s(hnd=%p) fds=(%d,%d,%d), base=(0x%lx,0x%lx,0x%lx), ion=(%d,%d,%d), flags=0x%x, size=%d, offset=%d, fmt=0x%x, w/h=%d/%d, stride/vstride=%d/%d, fwkfmt=0x%x, numints=%d, numfds=%d, evil fields=%d/%d/%d, %d/%d/%d/%d/%d, %d/0x%lx/%d/%d",
-			func, handle, hnd->fd, hnd->fd1, hnd->fd2, (long)hnd->base, (long)hnd->base1, (long)hnd->base2, hnd->handle, hnd->handle1, hnd->handle2, hnd->flags, hnd->size, hnd->offset, hnd->format,
+	ALOGI("%s(hnd=%p) fds=(%d,%d,%d), base=(0x%lx,0x%lx,0x%lx), "
+			"ion=(%d,%d,%d), flags=0x%x, size=%d/%d/%d, "
+			"offset=%d, fmt=0x%x/0x%x/0x%x, "
+			"w/h=%d/%d, stride/vstride=%d/%d, fwkfmt=0x%x, numints=%d, numfds=%d, "
+			"unknown: %d/%d/%d/%d/%d/%d/%d, base=%#jx/%#jx/%#jx",
+			func, handle, hnd->fd, hnd->fd1, hnd->fd2, (long)hnd->base, (long)hnd->base1, (long)hnd->base2,
+			hnd->handle, hnd->handle1, hnd->handle2, hnd->flags, hnd->size, hnd->size1, hnd->size2,
+			hnd->offset, hnd->format, hnd->format1, hnd->format2,
 			hnd->width, hnd->height, hnd->stride, hnd->vstride, hnd->frameworkFormat, hnd->numInts, hnd->numFds,
-			hnd->evil_mali_field, hnd->evil_mali_field2, hnd->evil_mali_field3,
-			hnd->dssRatio, hnd->cropLeft, hnd->cropTop, hnd->cropRight, hnd->cropBottom,
-			hnd->prefer_compression, (long)hnd->internal_format, hnd->is_compressible, hnd->compressed_out);
+			hnd->__unknown2, hnd->__unknown3, hnd->__unknown4, hnd->__unknown5, hnd->internal_format,
+			hnd->compressed_out, hnd->prefer_compression, hnd->base, hnd->base1, hnd->base2);
 #endif
 }
 
@@ -161,10 +166,12 @@ static int wrap_unlock(struct gralloc_module_t const* module,
 static int wrap_lock_ycbcr(struct gralloc_module_t const* module, buffer_handle_t handle, int usage,
 		int l, int t, int w, int h, struct android_ycbcr *ycbcr) {
 	ensure_gralloc_open();
-	ALOGI("lock_ycbcr(hnd=%p): usage(0x%x), l/t(%d/%d), w/h(%d/%d)",
-			handle, usage, l, t, w, h);
+	private_handle_t *hnd = (private_handle_t *)handle;
+	ALOGI("lock_ycbcr(hnd=%p): usage(0x%x), l/t(%d/%d), w/h(%d/%d). hnd{w=%d,h=%d,base=%#lx}",
+			handle, usage, l, t, w, h, hnd->width, hnd->height, (unsigned long )hnd->base);
 	int ret = OEM_GRALLOC_CALL(lock_ycbcr, handle, usage, l, t, w, h, ycbcr);
-	ALOGI("lock_ycbcr(hnd=%p): ret=%d", handle, ret);
+	ALOGI("lock_ycbcr(hnd=%p): ret=%d, ycbcr{y=%p,cb=%p,cr=%p,ystride=%zu,cstride=%zu,chroma_step=%zu}",
+			handle, ret, ycbcr->y, ycbcr->cb, ycbcr->cr, ycbcr->ystride, ycbcr->cstride, ycbcr->chroma_step);
 	return ret;
 }
 
@@ -177,6 +184,7 @@ int wrap_alloc(struct alloc_device_t* dev, int w, int h, int format, int usage,
 		if (!ret) {
 			dump_handle(*handle);
 		}
+
 end:
 		ALOGI("alloc(hnd=%p) returns ret(%d), stride(%d)", handle, ret, *stride);
 		return ret;
