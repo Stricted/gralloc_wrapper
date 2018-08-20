@@ -34,7 +34,7 @@
 #define OSS_GRALLOC "/system/lib/hw/gralloc.exynos5.so"
 #endif
 
-#define OSS_GRALLOC_PROPERTY "gralloc.use_oss"
+#define OSS_GRALLOC_PROPERTY "persist.gralloc.use_oss"
 
 #define OEM_GRALLOC_CALL(action, args...) ((oem_gralloc_module && oem_gralloc_module->action) ?\
 		oem_gralloc_module->action(oem_gralloc_module, args) : -ENOSYS);
@@ -95,16 +95,19 @@ static void _dump_handle(buffer_handle_t handle, const char *func) {
 	}
 	ALOGI("%s(hnd=%p) fds=(%d,%d,%d), base=(0x%lx,0x%lx,0x%lx), "
 			"ion=(%d,%d,%d), flags=0x%x, size=%d/%d/%d, "
-			"offset=%d, fmt=0x%x/0x%x/0x%x, "
+			"offset=%d, fmt=0x%x, unknown=0x%x, internal_fmt=0x%x, bit=%#x "
 			"w/h=%d/%d, stride/vstride=%d/%d, fwkfmt=0x%x, numints=%d, numfds=%d, "
+			"compressible=%d, "
 			"unknown: %d/%d/%d/%d/%d/%d/%d, base=%#jx/%#jx/%#jx",
 			func, handle, hnd->fd, hnd->fd1, hnd->fd2, (long)hnd->base, (long)hnd->base1, (long)hnd->base2,
 			hnd->handle, hnd->handle1, hnd->handle2, hnd->flags, hnd->size, hnd->size1, hnd->size2,
-			hnd->offset, hnd->format, hnd->format1, hnd->format2,
+			hnd->offset, hnd->format, hnd->__unknown2, hnd->internal_format, hnd->format_top_bit,
 			hnd->width, hnd->height, hnd->stride, hnd->vstride, hnd->frameworkFormat, hnd->numInts, hnd->numFds,
-			hnd->__unknown2, hnd->__unknown3, hnd->__unknown4, hnd->__unknown5, hnd->internal_format,
+			hnd->is_compressible,
+			hnd->__unknown2, hnd->__unknown3, hnd->__unknown4, hnd->__unknown5, hnd->__unknown6,
 			hnd->compressed_out, hnd->prefer_compression, hnd->base, hnd->base1, hnd->base2);
 #endif
+
 }
 
 static void ensure_gralloc_open(void) {
@@ -137,7 +140,9 @@ static void ensure_gralloc_open(void) {
 static int wrap_register_buffer(struct gralloc_module_t const* module,
 		buffer_handle_t handle) {
 	ensure_gralloc_open();
-	return OEM_GRALLOC_CALL(registerBuffer, handle);
+	int ret = OEM_GRALLOC_CALL(registerBuffer, handle);
+	ALOGI("register_buffer(hnd=%p) => %d", handle, ret);
+	return ret;
 }
 
 static int wrap_unregister_buffer(struct gralloc_module_t const* module,
@@ -172,6 +177,22 @@ static int wrap_lock_ycbcr(struct gralloc_module_t const* module, buffer_handle_
 	int ret = OEM_GRALLOC_CALL(lock_ycbcr, handle, usage, l, t, w, h, ycbcr);
 	ALOGI("lock_ycbcr(hnd=%p): ret=%d, ycbcr{y=%p,cb=%p,cr=%p,ystride=%zu,cstride=%zu,chroma_step=%zu}",
 			handle, ret, ycbcr->y, ycbcr->cb, ycbcr->cr, ycbcr->ystride, ycbcr->cstride, ycbcr->chroma_step);
+
+#if 0
+	int *mod = (int *)oem_gralloc_module;
+	struct private_module_t *priv = (struct private_module_t *)mod;
+	for (size_t i = 0; i < sizeof(struct private_module_t)/sizeof(int); i++) {
+		if (&mod[i] == (int *)&priv->ionfd) {
+			ALOGE("%#x: %#x - IONFD", (unsigned int)(i*sizeof(int)), mod[i]);
+		} else {
+#if 0
+			if (mod[i] == 0)
+				mod[i] = i;
+#endif
+			ALOGE("%#x: %#x .", (unsigned int)(i*sizeof(int)), mod[i]);
+		}
+	}
+#endif
 	return ret;
 }
 
